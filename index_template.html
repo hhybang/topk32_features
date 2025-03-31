@@ -2,23 +2,73 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Feature Index</title>
+  <title>All Feature Figures and Metadata</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
-    ul { list-style-type: none; padding: 0; }
-    li { margin: 5px 0; }
-    a { text-decoration: none; color: #0077cc; }
-    a:hover { text-decoration: underline; }
+    h1 { text-align: center; }
+    .feature {
+      display: flex;
+      flex-wrap: wrap;
+      margin-bottom: 30px;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 20px;
+    }
+    .feature img {
+      max-width: 400px;
+      margin-right: 20px;
+    }
+    .metadata {
+      flex-grow: 1;
+      min-width: 300px;
+    }
+    .metadata h2 { margin-top: 0; }
+    .metadata ul { list-style-type: none; padding-left: 0; }
+    .metadata li { margin-bottom: 3px; }
   </style>
 </head>
 <body>
-  <h1>Feature Index</h1>
-  <ul>
-    {% for feature_idx in features %}
-    <li>
-      <a href="features/feature_{{ feature_idx }}.html">Feature {{ feature_idx }}</a>
-    </li>
-    {% endfor %}
-  </ul>
+  <h1>All Feature Figures and Metadata</h1>
+  {% for feature in features %}
+  <div class="feature">
+    <div class="chart">
+      <img src="figures/feature_{{ feature.feature_idx }}.png" alt="Feature {{ feature.feature_idx }} plot">
+    </div>
+    <div class="metadata">
+      <h2>Feature {{ feature.feature_idx }}</h2>
+      <p><strong>Most Common Token:</strong> {{ feature.most_common_token }}</p>
+      <p><strong>Token Ratio:</strong> {{ feature.most_common_ratio }}</p>
+      <p><strong>Total Tokens Above Threshold:</strong> {{ feature.n_tokens_above_threshold }}</p>
+      
+      <h3>Chart Type Frequency</h3>
+      <ul>
+        {% for ct, freq in feature.chart_type_freq.items() %}
+        <li>{{ ct }}: {{ freq }}</li>
+        {% endfor %}
+      </ul>
+      
+      <h3>Left Context</h3>
+      {% if feature.context_left %}
+      <ul>
+        {% for ctx, freq in feature.context_left %}
+        <li>{{ ctx }}: {{ freq }}</li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p>No left context found.</p>
+      {% endif %}
+      
+      <h3>Right Context</h3>
+      {% if feature.context_right %}
+      <ul>
+        {% for ctx, freq in feature.context_right %}
+        <li>{{ ctx }}: {{ freq }}</li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p>No right context found.</p>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
 </body>
 </html>

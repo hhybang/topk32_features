@@ -3,7 +3,7 @@ import json
 from jinja2 import Environment, FileSystemLoader
 
 # Load metadata
-with open("/home/hbang/data/sae/metadata.json", "r") as f:
+with open("metadata.json", "r") as f:
     metadata = json.load(f)
 
 # Setup Jinja2 environment to load templates from the 'templates' directory

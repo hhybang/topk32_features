@@ -78,7 +78,7 @@
     function loadNextPage() {
       if (loadingPage || allDone) return;
       loadingPage = true;
-      fetch(`features_page_${currentPage}.json`)
+      fetch(`metadata/features_page_${currentPage}.json`)
         .then(r => { if(!r.ok) throw 0; return r.json(); })
         .then(data => {
           features = features.concat(data);

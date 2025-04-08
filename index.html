@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>BatchTopK32 SAE: Feature Figures and Metadata</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      font-size: 13px;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    .filters input,
+    .filters select {
+      padding: 5px;
+      font-size: 13px;
+    }
+    .features-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(500px, 1fr));
+      gap: 20px;
+      align-items: start;
+    }
+    .feature {
+      display: flex;
+      flex-direction: column;
+      border-bottom: 1px solid #ccc;
+      padding: 10px;
+      background-color: #fff;
+      overflow: hidden;
+    }
+    .chart-title {
+      font-weight: bold;
+      font-size: 14px;
+      margin-bottom: 5px;
+      text-align: center;
+    }
+    .chart img {
+      width: 100%;
+      max-height: 200px;
+      object-fit: contain;
+      display: block;
+      margin: 0 auto 10px;
+    }
+    .meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .meta-col {
+      flex: 1;
+      padding: 0 5px;
+    }
+    ul {
+      list-style-type: disc;
+      padding-left: 20px;
+      margin: 4px 0;
+    }
+    .bold {
+      font-weight: bold;
+    }
+    /* Context tokens block */
+    .context-block {
+      max-height: 80px;
+      overflow-y: auto;
+      border: 1px solid #ccc;
+      padding: 5px;
+      background: #fafafa;
+      margin-bottom: 10px;
+    }
+    .context-token {
+      display: inline-block;
+      margin: 2px;
+      padding: 2px 4px;
+      border-radius: 3px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1>BatchTopK32 Feature Figures and Metadata</h1>
+
+  <div class="filters">
+    <input type="text" id="tokenSearch" placeholder="Search Token">
+    <select id="chartFilter">
+      <option value="">All Chart Types</option>
+      <option value="bar">Bar</option>
+      <option value="area">Area</option>
+      <option value="line">Line</option>
+    </select>
+    <select id="xFilter">
+      <option value="">All X Types</option>
+      <option value="numeric">Numeric</option>
+      <option value="datetime">Datetime</option>
+      <option value="string">String</option>
+      <option value="other">Other</option>
+    </select>
+    <select id="yFilter">
+      <option value="">All Y Types</option>
+      <option value="numeric">Numeric</option>
+      <option value="datetime">Datetime</option>
+      <option value="string">String</option>
+      <option value="other">Other</option>
+    </select>
+    <select id="trendFilter">
+      <option value="">All Trends</option>
+      <option value="increasing">Increasing</option>
+      <option value="decreasing">Decreasing</option>
+      <option value="other">Other</option>
+    </select>
+    <select id="tokenPositionFilter">
+      <option value="">All Token Positions</option>
+      <option value="title">Title</option>
+      <option value="x_axis">X Axis</option>
+      <option value="y_axis">Y Axis</option>
+      <option value="x_value">X Value</option>
+      <option value="y_value">Y Value</option>
+    </select>
+  </div>
+
+  <div class="features-container" id="features-container"></div>
+
+  <script>
+    let features = [];
+    let filteredFeatures = [];
+    const container = document.getElementById('features-container');
+    let batchSize = 50, currentIndex = 0;
+
+    // Fetch the features JSON, then initialize.
+    fetch('features.json')
+      .then(res => res.json())
+      .then(data => {
+        features = data;
+        filteredFeatures = features;
+        setupFilters();
+        loadNextBatch();
+      })
+      .catch(err => console.error('Failed to load features.json:', err));
+
+    function setupFilters() {
+      document.getElementById("tokenSearch")
+        .addEventListener("input", updateFilteredFeatures);
+      document.querySelectorAll(".filters select")
+        .forEach(s => s.addEventListener("change", updateFilteredFeatures));
+    }
+
+    function createFeatureCard(feature) {
+      const modesPos = feature.token_positions_modes || [];
+      const div = document.createElement('div');
+      div.className = 'feature';
+
+      // Data attributes for filtering
+      div.setAttribute('data-token', feature.most_common_token.trim().toLowerCase());
+      div.setAttribute('data-chart-type', feature.chart_type_modes.map(x=>x.toLowerCase()).join(','));
+      div.setAttribute('data-x-type', feature.x_type_modes.map(x=>x.toLowerCase()).join(','));
+      div.setAttribute('data-y-type', feature.y_type_modes.map(x=>x.toLowerCase()).join(','));
+      div.setAttribute('data-trend', feature.trend_modes.map(x=>x.toLowerCase()).join(','));
+      div.setAttribute('data-token-position', modesPos.map(x=>x.toLowerCase()).join(','));
+
+      div.innerHTML = `
+        <div class="chart-title">Feature ${feature.feature_idx}</div>
+        <img loading="lazy" src="stacked_figures/feature_${feature.feature_idx}.png" alt="Feature ${feature.feature_idx}">
+        <div class="meta">
+          <div class="meta-col">
+            <p>Mode Token: <span class="bold">${feature.most_common_token}</span> (${feature.most_common_ratio})</p>
+            <p>Token Position:</p>
+            <ul>
+              ${Object.entries(feature.token_positions || {}).map(([pos, pct]) =>
+                modesPos.includes(pos)
+                  ? `<li><span class="bold">${pos}: ${pct}</span></li>`
+                  : `<li>${pos}: ${pct}</li>`
+              ).join('')}
+            </ul>
+            <p>Context Tokens:</p>
+            <div class="context-block"></div>
+          </div>
+          <div class="meta-col">
+            <p>Chart Types:</p>
+            <ul>
+              ${Object.entries(feature.chart_type_freq).map(([k,v]) =>
+                feature.chart_type_modes.includes(k)
+                  ? `<li><span class="bold">${k} (${v})</span></li>`
+                  : `<li>${k} (${v})</li>`
+              ).join('')}
+            </ul>
+            <p>Trends:</p>
+            <ul>
+              ${Object.entries(feature.trend_freq).map(([k,v]) =>
+                feature.trend_modes.includes(k)
+                  ? `<li><span class="bold">${k} (${v})</span></li>`
+                  : `<li>${k} (${v})</li>`
+              ).join('')}
+            </ul>
+          </div>
+          <div class="meta-col">
+            <p>X Types:</p>
+            <ul>
+              ${Object.entries(feature.x_type_freq).map(([k,v]) =>
+                feature.x_type_modes.includes(k)
+                  ? `<li><span class="bold">${k} (${v})</span></li>`
+                  : `<li>${k} (${v})</li>`
+              ).join('')}
+            </ul>
+            <p>Y Types:</p>
+            <ul>
+              ${Object.entries(feature.y_type_freq).map(([k,v]) =>
+                feature.y_type_modes.includes(k)
+                  ? `<li><span class="bold">${k} (${v})</span></li>`
+                  : `<li>${k} (${v})</li>`
+              ).join('')}
+            </ul>
+          </div>
+        </div>
+      `;
+
+      // Populate context tokens
+      const cb = div.querySelector('.context-block');
+      if (feature.context_examples) {
+        Object.values(feature.context_examples).forEach(ctx => {
+          const maxVal = Math.max(...ctx.values);
+          ctx.tokens.forEach((tok, idx) => {
+            const alpha = maxVal>0 ? ctx.values[idx]/maxVal : 0;
+            const span = document.createElement('span');
+            span.className = 'context-token';
+            span.textContent = tok;
+            span.style.backgroundColor = `rgba(0,0,0,${alpha})`;
+            span.style.color = alpha>0.5 ? 'white' : 'black';
+            cb.appendChild(span);
+          });
+          const hr = document.createElement('hr');
+          hr.style.border = 'none';
+          hr.style.borderTop = '1px solid #eee';
+          cb.appendChild(hr);
+        });
+      }
+
+      return div;
+    }
+
+    function matchValue(dataValue, filterValue) {
+      const vals = dataValue.split(',').map(v=>v.trim());
+      return !filterValue || vals.includes(filterValue);
+    }
+
+    function updateFilteredFeatures() {
+      const chartType   = document.getElementById("chartFilter").value;
+      const xType       = document.getElementById("xFilter").value;
+      const yType       = document.getElementById("yFilter").value;
+      const trend       = document.getElementById("trendFilter").value;
+      const tokenSearch = document.getElementById("tokenSearch").value.toLowerCase();
+      const tokenPos    = document.getElementById("tokenPositionFilter").value;
+
+      filteredFeatures = features.filter(f => {
+        const ftChart = f.chart_type_modes.map(x=>x.toLowerCase()).join(',');
+        const ftX     = f.x_type_modes.map(x=>x.toLowerCase()).join(',');
+        const ftY     = f.y_type_modes.map(x=>x.toLowerCase()).join(',');
+        const ftTrend = f.trend_modes.map(x=>x.toLowerCase()).join(',');
+        const ftToken = f.most_common_token.trim().toLowerCase();
+        const ftPos   = (f.token_positions_modes || []).map(x=>x.toLowerCase());
+
+        return matchValue(ftChart, chartType)
+            && matchValue(ftX, xType)
+            && matchValue(ftY, yType)
+            && matchValue(ftTrend, trend)
+            && (!tokenSearch || ftToken.includes(tokenSearch))
+            && (!tokenPos    || ftPos.includes(tokenPos));
+      });
+
+      currentIndex = 0;
+      container.innerHTML = '';
+      loadNextBatch();
+    }
+
+    function loadNextBatch() {
+      const end = Math.min(currentIndex + batchSize, filteredFeatures.length);
+      for (let i = currentIndex; i < end; i++) {
+        container.appendChild(createFeatureCard(filteredFeatures[i]));
+      }
+      currentIndex = end;
+    }
+
+    // Lazy load more on scroll
+    window.addEventListener('scroll', () => {
+      if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
+        loadNextBatch();
+      }
+    });
+  </script>
+</body>
+</html>

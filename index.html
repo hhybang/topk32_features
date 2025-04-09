@@ -25,7 +25,6 @@
                      padding: 5px; background: #fafafa; margin-bottom: 10px; }
     .context-token { display: inline-block; margin: 2px; padding: 2px 4px;
                      border-radius: 3px; font-size: 12px; }
-    /* Hoverable context‐example wrapper */
     .context-example {
       position: relative;
       display: inline-block;
@@ -87,14 +86,15 @@
   <div class="features-container" id="features-container"></div>
 
   <script>
-    // injected by Jinja
+    // Injected by Jinja
     const TOTAL_PAGES = 163;
     const PAGE_SIZE   = 50;
 
-    let features = [];            // cache of loaded pages
+    let features = [];
     let filtering = false;
     let currentPage = 0;
     let loading = false;
+    const loadedPages = new Set();
     const container = document.getElementById('features-container');
 
     function noFilterActive() {
@@ -145,34 +145,51 @@
       return 0;
     }
 
-    function sortAndRender(matches) {
-      matches.sort((a,b)=> getPct(b) - getPct(a));
-      matches.forEach(f=> container.appendChild(createFeatureCard(f)));
-    }
-
     function loadPage() {
       if (loading || currentPage >= TOTAL_PAGES) return;
       loading = true;
       fetch(`metadata/features_page_${currentPage}.json`)
-        .then(r=> r.ok ? r.json() : [])
+        .then(r => r.ok ? r.json() : [])
         .then(data => {
           features.push(...data);
+          loadedPages.add(currentPage);
           if (!filtering) {
-            data.forEach(f=> container.appendChild(createFeatureCard(f)));
+            data.forEach(f => container.appendChild(createFeatureCard(f)));
           } else {
             const matches = data.filter(matchAllFilters);
-            sortAndRender(matches);
+            matches.sort((a,b)=>getPct(b)-getPct(a));
+            matches.forEach(f => container.appendChild(createFeatureCard(f)));
           }
           currentPage++;
         })
-        .finally(()=> loading = false);
+        .finally(() => { loading = false; });
     }
 
-    function updateFilteredFeatures() {
+    function loadAllPages() {
+      const promises = [];
+      for (let p = 0; p < TOTAL_PAGES; p++) {
+        if (!loadedPages.has(p)) {
+          promises.push(
+            fetch(`metadata/features_page_${p}.json`)
+              .then(r => r.ok ? r.json() : [])
+              .then(data => {
+                features.push(...data);
+                loadedPages.add(p);
+              })
+          );
+        }
+      }
+      return Promise.all(promises);
+    }
+
+    async function updateFilteredFeatures() {
       filtering = true;
-      currentPage = 0;
       container.innerHTML = '';
-      loadPage();
+      currentPage = TOTAL_PAGES; // stop lazy‐loading
+      await loadAllPages();
+      const matches = features.filter(matchAllFilters);
+      matches.sort((a,b)=>getPct(b)-getPct(a));
+      matches.forEach(f => container.appendChild(createFeatureCard(f)));
     }
 
     function createFeatureCard(f) {
@@ -234,12 +251,14 @@
         </div>
       `;
 
-      // Populate context-block with hoverable examples
+      // Hoverable context examples
       const cb = div.querySelector('.context-block');
       if (f.context_examples) {
         Object.values(f.context_examples).forEach(ctx => {
           const wrapper = document.createElement('div');
           wrapper.className = 'context-example';
+
+          // tokens
           const maxV = Math.max(...ctx.values);
           ctx.tokens.forEach((t,i) => {
             const alpha = maxV ? ctx.values[i]/maxV : 0;
@@ -250,9 +269,10 @@
             span.style.color = alpha>0.5 ? 'white' : 'black';
             wrapper.appendChild(span);
           });
-          // Hover image
+
+          // hover image
           const img = document.createElement('img');
-          img.src = `images/${ctx.chart_idx}.png`;
+          img.src = `images/${ctx.chart_idx}.png`;  // adjust path if needed
           wrapper.appendChild(img);
 
           cb.appendChild(wrapper);
@@ -274,7 +294,7 @@
     // Initial load & infinite scroll
     loadPage();
     window.addEventListener('scroll', () => {
-      if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
+      if (!filtering && (window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
         loadPage();
       }
     });

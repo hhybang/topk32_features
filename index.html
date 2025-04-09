@@ -69,20 +69,25 @@
   <div class="features-container" id="features-container"></div>
 
   <script>
+    // these are injected by Jinja:
+    const TOTAL_PAGES = 163;
+    const PAGE_SIZE    = 50;
+
     let features = [], filteredFeatures = [];
     let currentPage = 0, loadingPage = false, allDone = false;
-    const batchSize = 50;
+    const loadedPages = new Set();
     const container = document.getElementById('features-container');
 
-    // Load next page for unfiltered view
+    // Lazy-load one page (for unfiltered view)
     function loadNextPage() {
-      if (loadingPage || allDone) return;
+      if (loadingPage || allDone || currentPage >= TOTAL_PAGES) return;
       loadingPage = true;
       fetch(`metadata/features_page_${currentPage}.json`)
         .then(r => { if(!r.ok) throw 0; return r.json(); })
         .then(data => {
           features = features.concat(data);
-          // If no filter active, render these new cards immediately
+          loadedPages.add(currentPage);
+          // if no filter active, append cards immediately
           if (noFilterActive()) {
             data.forEach(f => container.appendChild(createFeatureCard(f)));
           }
@@ -92,7 +97,24 @@
         .catch(_ => { allDone = true; loadingPage = false; });
     }
 
-    // Utility: check if all filters are empty
+    // Load all pages (for filtering)
+    function loadAllPages() {
+      const promises = [];
+      for (let i = 0; i < TOTAL_PAGES; i++) {
+        if (!loadedPages.has(i)) {
+          promises.push(
+            fetch(`metadata/features_page_${i}.json`)
+              .then(r => r.ok ? r.json() : [])
+              .then(data => {
+                features = features.concat(data);
+                loadedPages.add(i);
+              })
+          );
+        }
+      }
+      return Promise.all(promises);
+    }
+
     function noFilterActive() {
       return !document.getElementById("chartFilter").value
           && !document.getElementById("xFilter").value
@@ -102,9 +124,9 @@
           && !document.getElementById("tokenPositionFilter").value;
     }
 
-    // Build a card for one feature
+    // Build one feature card
     function createFeatureCard(f) {
-      const modesPos = f.token_positions_modes||[];
+      const modesPos = f.token_positions_modes || [];
       const div = document.createElement('div');
       div.className = 'feature';
       div.setAttribute('data-token', f.most_common_token.trim().toLowerCase());
@@ -113,6 +135,7 @@
       div.setAttribute('data-y-type', f.y_type_modes.map(x=>x.toLowerCase()).join(','));
       div.setAttribute('data-trend', f.trend_modes.map(x=>x.toLowerCase()).join(','));
       div.setAttribute('data-token-position', modesPos.map(x=>x.toLowerCase()).join(','));
+
       div.innerHTML = `
         <div class="chart-title">Feature ${f.feature_idx}</div>
         <img loading="lazy" src="stacked_figures/feature_${f.feature_idx}.png" alt="">
@@ -127,7 +150,8 @@
                   : `<li>${p}: ${pc}</li>`
               ).join('')}
             </ul>
-            <p>Context Tokens:</p><div class="context-block"></div>
+            <p>Context Tokens:</p>
+            <div class="context-block"></div>
           </div>
           <div class="meta-col">
             <p>Chart Types:</p>
@@ -159,22 +183,23 @@
           </div>
         </div>
       `;
+
       // populate context-block
       const cb = div.querySelector('.context-block');
       if (f.context_examples) {
         Object.values(f.context_examples).forEach(ctx => {
           const maxV = Math.max(...ctx.values);
-          ctx.tokens.forEach((t,i)=>{
-            const a = maxV?ctx.values[i]/maxV:0;
+          ctx.tokens.forEach((t,i) => {
+            const a = maxV ? ctx.values[i]/maxV : 0;
             const s = document.createElement('span');
-            s.className='context-token';
+            s.className = 'context-token';
             s.textContent = t;
-            s.style.backgroundColor=`rgba(0,0,0,${a})`;
-            s.style.color=a>0.5?'white':'black';
+            s.style.backgroundColor = `rgba(0,0,0,${a})`;
+            s.style.color = a>0.5 ? 'white' : 'black';
             cb.appendChild(s);
           });
-          const hr=document.createElement('hr');
-          hr.style.border='none'; hr.style.borderTop='1px solid #eee';
+          const hr = document.createElement('hr');
+          hr.style.border = 'none'; hr.style.borderTop = '1px solid #eee';
           cb.appendChild(hr);
         });
       }
@@ -182,75 +207,75 @@
     }
 
     function matchValue(dataValue, filterValue) {
-      const arr = dataValue.split(',').map(s=>s.trim());
+      const arr = dataValue.split(',').map(v=>v.trim());
       return !filterValue || arr.includes(filterValue);
     }
 
-    // After filtering, sort descending by the chosen filter’s %
+    // Sort filteredFeatures descending by the active filter’s percentage
     function sortFiltered() {
       const cf = document.getElementById("chartFilter").value;
       const xf = document.getElementById("xFilter").value;
       const yf = document.getElementById("yFilter").value;
       const tf = document.getElementById("trendFilter").value;
       const pf = document.getElementById("tokenPositionFilter").value;
-      const sf = document.getElementById("tokenSearch").value? 'search' : null;
+      const ts = document.getElementById("tokenSearch").value ? 'search' : null;
 
-      const getPct = f => {
-        if (cf) return parseInt(f.chart_type_freq[cf]);
-        if (xf) return parseInt(f.x_type_freq[xf]);
-        if (yf) return parseInt(f.y_type_freq[yf]);
-        if (tf) return parseInt(f.trend_freq[tf]);
-        if (pf) return parseInt(f.token_positions[pf]);
-        if (sf) return parseInt(f.most_common_ratio);
+      function getPct(f) {
+        if (cf) return parseInt(f.chart_type_freq[cf]||0);
+        if (xf) return parseInt(f.x_type_freq[xf]||0);
+        if (yf) return parseInt(f.y_type_freq[yf]||0);
+        if (tf) return parseInt(f.trend_freq[tf]||0);
+        if (pf) return parseInt(f.token_positions[pf]||0);
+        if (ts) return parseInt(f.most_common_ratio||0);
         return 0;
-      };
+      }
 
-      filteredFeatures.sort((a,b)=>getPct(b)-getPct(a));
+      filteredFeatures.sort((a,b) => getPct(b) - getPct(a));
     }
 
     function updateFilteredFeatures() {
-      // clear out
-      filteredFeatures = [];
-      container.innerHTML = '';
-      allDone = false;
+      // First ensure we have all features loaded
+      loadAllPages().then(() => {
+        filteredFeatures = [];
+        container.innerHTML = '';
 
-      const cf = document.getElementById("chartFilter").value;
-      const xf = document.getElementById("xFilter").value;
-      const yf = document.getElementById("yFilter").value;
-      const tf = document.getElementById("trendFilter").value;
-      const ts = document.getElementById("tokenSearch").value.toLowerCase();
-      const pf = document.getElementById("tokenPositionFilter").value;
+        const cf = document.getElementById("chartFilter").value;
+        const xf = document.getElementById("xFilter").value;
+        const yf = document.getElementById("yFilter").value;
+        const tf = document.getElementById("trendFilter").value;
+        const ts = document.getElementById("tokenSearch").value.toLowerCase();
+        const pf = document.getElementById("tokenPositionFilter").value;
 
-      // filter among all loaded features
-      features.forEach(f => {
-        const ftChart = f.chart_type_modes.map(x=>x.toLowerCase()).join(',');
-        const ftX     = f.x_type_modes.map(x=>x.toLowerCase()).join(',');
-        const ftY     = f.y_type_modes.map(x=>x.toLowerCase()).join(',');
-        const ftTrend = f.trend_modes.map(x=>x.toLowerCase()).join(',');
-        const ftToken = f.most_common_token.toLowerCase();
-        const ftPos   = (f.token_positions_modes||[]).map(x=>x.toLowerCase());
+        features.forEach(f => {
+          const ftChart = f.chart_type_modes.map(x=>x.toLowerCase()).join(',');
+          const ftX     = f.x_type_modes.map(x=>x.toLowerCase()).join(',');
+          const ftY     = f.y_type_modes.map(x=>x.toLowerCase()).join(',');
+          const ftTrend = f.trend_modes.map(x=>x.toLowerCase()).join(',');
+          const ftToken = f.most_common_token.toLowerCase();
+          const ftPos   = (f.token_positions_modes||[]).map(x=>x.toLowerCase());
 
-        if ( matchValue(ftChart, cf)
-          && matchValue(ftX, xf)
-          && matchValue(ftY, yf)
-          && matchValue(ftTrend, tf)
-          && (!ts || ftToken.includes(ts))
-          && (!pf || ftPos.includes(pf)) ) {
-          filteredFeatures.push(f);
-        }
+          if (
+            matchValue(ftChart, cf) &&
+            matchValue(ftX, xf) &&
+            matchValue(ftY, yf) &&
+            matchValue(ftTrend, tf) &&
+            (!ts || ftToken.includes(ts)) &&
+            (!pf || ftPos.includes(pf))
+          ) {
+            filteredFeatures.push(f);
+          }
+        });
+
+        sortFiltered();
+        filteredFeatures.forEach(f => container.appendChild(createFeatureCard(f)));
       });
-
-      // sort and render all filtered
-      sortFiltered();
-      filteredFeatures.forEach(f => container.appendChild(createFeatureCard(f)));
     }
 
-    // wire up filters
     document.getElementById("tokenSearch").addEventListener("input", updateFilteredFeatures);
     document.querySelectorAll(".filters select")
       .forEach(el => el.addEventListener("change", updateFilteredFeatures));
 
-    // initial infinite scroll
+    // Initial load and scroll hook
     loadNextPage();
     window.addEventListener('scroll', () => {
       if (noFilterActive() &&

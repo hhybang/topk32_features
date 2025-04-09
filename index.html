@@ -69,158 +69,57 @@
   <div class="features-container" id="features-container"></div>
 
   <script>
-    // these are injected by Jinja:
-    const TOTAL_PAGES = 163;
-    const PAGE_SIZE    = 50;
-
-    let features = [], filteredFeatures = [];
-    let currentPage = 0, loadingPage = false, allDone = false;
-    const loadedPages = new Set();
-    const container = document.getElementById('features-container');
-
-    // Lazy-load one page (for unfiltered view)
-    function loadNextPage() {
-      if (loadingPage || allDone || currentPage >= TOTAL_PAGES) return;
-      loadingPage = true;
-      fetch(`metadata/features_page_${currentPage}.json`)
-        .then(r => { if(!r.ok) throw 0; return r.json(); })
-        .then(data => {
-          features = features.concat(data);
-          loadedPages.add(currentPage);
-          // if no filter active, append cards immediately
-          if (noFilterActive()) {
-            data.forEach(f => container.appendChild(createFeatureCard(f)));
-          }
-          currentPage++;
-          loadingPage = false;
-        })
-        .catch(_ => { allDone = true; loadingPage = false; });
-    }
-
-    // Load all pages (for filtering)
-    function loadAllPages() {
-      const promises = [];
-      for (let i = 0; i < TOTAL_PAGES; i++) {
-        if (!loadedPages.has(i)) {
-          promises.push(
-            fetch(`metadata/features_page_${i}.json`)
-              .then(r => r.ok ? r.json() : [])
-              .then(data => {
-                features = features.concat(data);
-                loadedPages.add(i);
-              })
-          );
-        }
+      // ---- Globals & helpers ----
+      const TOTAL_PAGES = 163;
+      const PAGE_SIZE   = 50;
+      const BATCH_SIZE  = 50;            // how many cards to render at once
+      const container   = document.getElementById('features-container');
+    
+      let features = [];                 // all loaded features
+      let filteredFeatures = [];         // features matching current filter
+      let renderIndex = 0;               // how many filteredFeatures we've rendered
+      let filterTimer = null;            // for debouncing
+      let abortController = null;        // to cancel in‑flight loads
+    
+      function noFilterActive() {
+        return !document.getElementById("chartFilter").value
+            && !document.getElementById("xFilter").value
+            && !document.getElementById("yFilter").value
+            && !document.getElementById("trendFilter").value
+            && !document.getElementById("tokenSearch").value
+            && !document.getElementById("tokenPositionFilter").value;
       }
-      return Promise.all(promises);
-    }
-
-    function noFilterActive() {
-      return !document.getElementById("chartFilter").value
-          && !document.getElementById("xFilter").value
-          && !document.getElementById("yFilter").value
-          && !document.getElementById("trendFilter").value
-          && !document.getElementById("tokenSearch").value
-          && !document.getElementById("tokenPositionFilter").value;
-    }
-
-    // Build one feature card
-    function createFeatureCard(f) {
-      const modesPos = f.token_positions_modes || [];
-      const div = document.createElement('div');
-      div.className = 'feature';
-      div.setAttribute('data-token', f.most_common_token.trim().toLowerCase());
-      div.setAttribute('data-chart-type', f.chart_type_modes.map(x=>x.toLowerCase()).join(','));
-      div.setAttribute('data-x-type', f.x_type_modes.map(x=>x.toLowerCase()).join(','));
-      div.setAttribute('data-y-type', f.y_type_modes.map(x=>x.toLowerCase()).join(','));
-      div.setAttribute('data-trend', f.trend_modes.map(x=>x.toLowerCase()).join(','));
-      div.setAttribute('data-token-position', modesPos.map(x=>x.toLowerCase()).join(','));
-
-      div.innerHTML = `
-        <div class="chart-title">Feature ${f.feature_idx}</div>
-        <img loading="lazy" src="stacked_figures/feature_${f.feature_idx}.png" alt="">
-        <div class="meta">
-          <div class="meta-col">
-            <p>Mode Token: <span class="bold">${f.most_common_token}</span> (${f.most_common_ratio})</p>
-            <p>Token Position:</p>
-            <ul>
-              ${Object.entries(f.token_positions||{}).map(([p,pc])=>
-                modesPos.includes(p)
-                  ? `<li><span class="bold">${p}: ${pc}</span></li>`
-                  : `<li>${p}: ${pc}</li>`
-              ).join('')}
-            </ul>
-            <p>Context Tokens:</p>
-            <div class="context-block"></div>
-          </div>
-          <div class="meta-col">
-            <p>Chart Types:</p>
-            <ul>${Object.entries(f.chart_type_freq).map(([k,v])=>
-              f.chart_type_modes.includes(k)
-                ? `<li><span class="bold">${k} (${v})</span></li>`
-                : `<li>${k} (${v})</li>`
-            ).join('')}</ul>
-            <p>Trends:</p>
-            <ul>${Object.entries(f.trend_freq).map(([k,v])=>
-              f.trend_modes.includes(k)
-                ? `<li><span class="bold">${k} (${v})</span></li>`
-                : `<li>${k} (${v})</li>`
-            ).join('')}</ul>
-          </div>
-          <div class="meta-col">
-            <p>X Types:</p>
-            <ul>${Object.entries(f.x_type_freq).map(([k,v])=>
-              f.x_type_modes.includes(k)
-                ? `<li><span class="bold">${k} (${v})</span></li>`
-                : `<li>${k} (${v})</li>`
-            ).join('')}</ul>
-            <p>Y Types:</p>
-            <ul>${Object.entries(f.y_type_freq).map(([k,v])=>
-              f.y_type_modes.includes(k)
-                ? `<li><span class="bold">${k} (${v})</span></li>`
-                : `<li>${k} (${v})</li>`
-            ).join('')}</ul>
-          </div>
-        </div>
-      `;
-
-      // populate context-block
-      const cb = div.querySelector('.context-block');
-      if (f.context_examples) {
-        Object.values(f.context_examples).forEach(ctx => {
-          const maxV = Math.max(...ctx.values);
-          ctx.tokens.forEach((t,i) => {
-            const a = maxV ? ctx.values[i]/maxV : 0;
-            const s = document.createElement('span');
-            s.className = 'context-token';
-            s.textContent = t;
-            s.style.backgroundColor = `rgba(0,0,0,${a})`;
-            s.style.color = a>0.5 ? 'white' : 'black';
-            cb.appendChild(s);
-          });
-          const hr = document.createElement('hr');
-          hr.style.border = 'none'; hr.style.borderTop = '1px solid #eee';
-          cb.appendChild(hr);
-        });
+    
+      function matchAllFilters(f) {
+        const cf = document.getElementById("chartFilter").value;
+        const xf = document.getElementById("xFilter").value;
+        const yf = document.getElementById("yFilter").value;
+        const tf = document.getElementById("trendFilter").value;
+        const ts = document.getElementById("tokenSearch").value.toLowerCase();
+        const pf = document.getElementById("tokenPositionFilter").value;
+        const ftChart = f.chart_type_modes.map(x=>x.toLowerCase()).join(',');
+        const ftX     = f.x_type_modes.map(x=>x.toLowerCase()).join(',');
+        const ftY     = f.y_type_modes.map(x=>x.toLowerCase()).join(',');
+        const ftTrend = f.trend_modes.map(x=>x.toLowerCase()).join(',');
+        const ftToken = f.most_common_token.toLowerCase();
+        const ftPos   = (f.token_positions_modes||[]).map(x=>x.toLowerCase());
+    
+        return (!cf || ftChart.includes(cf))
+            && (!xf || ftX.includes(xf))
+            && (!yf || ftY.includes(yf))
+            && (!tf || ftTrend.includes(tf))
+            && (!ts || ftToken.includes(ts))
+            && (!pf || ftPos.includes(pf));
       }
-      return div;
-    }
-
-    function matchValue(dataValue, filterValue) {
-      const arr = dataValue.split(',').map(v=>v.trim());
-      return !filterValue || arr.includes(filterValue);
-    }
-
-    // Sort filteredFeatures descending by the active filter’s percentage
-    function sortFiltered() {
-      const cf = document.getElementById("chartFilter").value;
-      const xf = document.getElementById("xFilter").value;
-      const yf = document.getElementById("yFilter").value;
-      const tf = document.getElementById("trendFilter").value;
-      const pf = document.getElementById("tokenPositionFilter").value;
-      const ts = document.getElementById("tokenSearch").value ? 'search' : null;
-
+    
       function getPct(f) {
+        const cf = document.getElementById("chartFilter").value;
+        const xf = document.getElementById("xFilter").value;
+        const yf = document.getElementById("yFilter").value;
+        const tf = document.getElementById("trendFilter").value;
+        const pf = document.getElementById("tokenPositionFilter").value;
+        const ts = document.getElementById("tokenSearch").value ? 'search' : null;
+    
         if (cf) return parseInt(f.chart_type_freq[cf]||0);
         if (xf) return parseInt(f.x_type_freq[xf]||0);
         if (yf) return parseInt(f.y_type_freq[yf]||0);
@@ -229,60 +128,92 @@
         if (ts) return parseInt(f.most_common_ratio||0);
         return 0;
       }
-
-      filteredFeatures.sort((a,b) => getPct(b) - getPct(a));
-    }
-
-    function updateFilteredFeatures() {
-      // First ensure we have all features loaded
-      loadAllPages().then(() => {
-        filteredFeatures = [];
-        container.innerHTML = '';
-
-        const cf = document.getElementById("chartFilter").value;
-        const xf = document.getElementById("xFilter").value;
-        const yf = document.getElementById("yFilter").value;
-        const tf = document.getElementById("trendFilter").value;
-        const ts = document.getElementById("tokenSearch").value.toLowerCase();
-        const pf = document.getElementById("tokenPositionFilter").value;
-
-        features.forEach(f => {
-          const ftChart = f.chart_type_modes.map(x=>x.toLowerCase()).join(',');
-          const ftX     = f.x_type_modes.map(x=>x.toLowerCase()).join(',');
-          const ftY     = f.y_type_modes.map(x=>x.toLowerCase()).join(',');
-          const ftTrend = f.trend_modes.map(x=>x.toLowerCase()).join(',');
-          const ftToken = f.most_common_token.toLowerCase();
-          const ftPos   = (f.token_positions_modes||[]).map(x=>x.toLowerCase());
-
-          if (
-            matchValue(ftChart, cf) &&
-            matchValue(ftX, xf) &&
-            matchValue(ftY, yf) &&
-            matchValue(ftTrend, tf) &&
-            (!ts || ftToken.includes(ts)) &&
-            (!pf || ftPos.includes(pf))
-          ) {
-            filteredFeatures.push(f);
-          }
-        });
-
-        sortFiltered();
-        filteredFeatures.forEach(f => container.appendChild(createFeatureCard(f)));
-      });
-    }
-
-    document.getElementById("tokenSearch").addEventListener("input", updateFilteredFeatures);
-    document.querySelectorAll(".filters select")
-      .forEach(el => el.addEventListener("change", updateFilteredFeatures));
-
-    // Initial load and scroll hook
-    loadNextPage();
-    window.addEventListener('scroll', () => {
-      if (noFilterActive() &&
-          (window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
-        loadNextPage();
+    
+      function renderBatch() {
+        const end = Math.min(renderIndex + BATCH_SIZE, filteredFeatures.length);
+        for (let i = renderIndex; i < end; i++) {
+          container.appendChild(createFeatureCard(filteredFeatures[i]));
+        }
+        renderIndex = end;
       }
-    });
-  </script>
+    
+      // ---- Paginated loading for unfiltered view ----
+      let pageLoading = false;
+      function loadNextPage() {
+        if (pageLoading || allDone || currentPage >= TOTAL_PAGES) return;
+        pageLoading = true;
+        fetch(`metadata/features_page_${currentPage}.json`)
+          .then(r => { if (!r.ok) throw 0; return r.json(); })
+          .then(data => {
+            features = features.concat(data);
+            if (noFilterActive()) {
+              data.forEach(f => container.appendChild(createFeatureCard(f)));
+            }
+            currentPage++;
+          })
+          .catch(_ => { allDone = true; })
+          .finally(() => pageLoading = false);
+      }
+    
+      // ---- New: Full-load for filtering ----
+      async function loadAllPagesSequentially(signal) {
+        // load pages one by one, abortable
+        for (let p = 0; p < TOTAL_PAGES; p++) {
+          if (signal.aborted) throw new DOMException('aborted','AbortError');
+          if (p < loadedPages.size) continue; // skip already loaded
+          const res = await fetch(`metadata/features_page_${p}.json`, { signal });
+          if (!res.ok) continue;
+          const data = await res.json();
+          features = features.concat(data);
+          loadedPages.add(p);
+        }
+      }
+    
+      // ---- Filter handler ----
+      async function updateFilteredFeatures() {
+        // debounce
+        clearTimeout(filterTimer);
+        filterTimer = setTimeout(async () => {
+          // cancel any in-flight loads
+          if (abortController) abortController.abort();
+          abortController = new AbortController();
+          container.innerHTML = '';
+          filteredFeatures = [];
+          renderIndex = 0;
+    
+          // load all pages sequentially, abortable
+          try {
+            await loadAllPagesSequentially(abortController.signal);
+          } catch (e) {
+            if (e.name === 'AbortError') return;  // user changed filter again
+            console.error(e);
+          }
+    
+          // filter & sort
+          filteredFeatures = features.filter(matchAllFilters);
+          filteredFeatures.sort((a,b) => getPct(b) - getPct(a));
+    
+          // render first batch
+          renderBatch();
+        }, 300);
+      }
+    
+      // ---- Wire up ----
+      document.getElementById("tokenSearch").addEventListener("input", updateFilteredFeatures);
+      document.querySelectorAll(".filters select")
+        .forEach(el => el.addEventListener("change", updateFilteredFeatures));
+    
+      // initial lazy-load
+      let currentPage = 0, allDone = false;
+      const loadedPages = new Set();
+      loadNextPage();
+      window.addEventListener('scroll', () => {
+        if (noFilterActive() &&
+            (window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
+          loadNextPage();
+        }
+      });
+    </script>
+
 </body>
 </html>

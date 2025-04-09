@@ -26,22 +26,13 @@
     .context-token { display: inline-block; margin: 2px; padding: 2px 4px;
                      border-radius: 3px; font-size: 12px; }
     .context-example {
-      position: relative;
-      display: inline-block;
-      margin-right: 8px;
+      position: relative; display: inline-block; margin-right: 8px;
     }
     .context-example img {
-      display: none;
-      position: absolute;
-      top: 100%; left: 0;
-      width: 200px;
-      border: 1px solid #ccc;
-      background: #fff;
-      z-index: 100;
+      display: none; position: absolute; top: 100%; left: 0;
+      width: 200px; border: 1px solid #ccc; background: #fff; z-index: 100;
     }
-    .context-example:hover img {
-      display: block;
-    }
+    .context-example:hover img { display: block; }
   </style>
 </head>
 <body>
@@ -86,24 +77,60 @@
   <div class="features-container" id="features-container"></div>
 
   <script>
-    // Injected by Jinja
-    const TOTAL_PAGES = 163;
-    const PAGE_SIZE   = 50;
-
-    let features = [];
-    let filtering = false;
-    let currentPage = 0;
-    let loading = false;
-    const loadedPages = new Set();
+    let summary = [], details = null;
     const container = document.getElementById('features-container');
 
-    function noFilterActive() {
-      return !document.getElementById("chartFilter").value
-          && !document.getElementById("xFilter").value
-          && !document.getElementById("yFilter").value
-          && !document.getElementById("trendFilter").value
-          && !document.getElementById("tokenSearch").value
-          && !document.getElementById("tokenPositionFilter").value;
+    // 1) Load summary JSON for instant filtering & rendering
+    fetch('features_summary.json')
+      .then(r => r.json())
+      .then(data => {
+        summary = data;
+        renderBatch(summary);
+        // 2) Then load the full details in the background
+        return fetch('features_details.json');
+      })
+      .then(r => r.json())
+      .then(d => {
+        details = d;
+        // fill context blocks for already-rendered cards
+        document.querySelectorAll('.feature').forEach(fillContext);
+      })
+      .catch(console.error);
+
+    // Render up to `batchSize` cards from `list`, starting at `start`
+    const batchSize = 50;
+    function renderBatch(list, start = 0) {
+      const end = Math.min(start + batchSize, list.length);
+      for (let i = start; i < end; i++) {
+        container.appendChild(createCard(list[i]));
+      }
+      if (end < list.length && !isFiltering()) {
+        window.addEventListener('scroll', onScroll);
+      }
+    }
+    function onScroll() {
+      if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 300) {
+        window.removeEventListener('scroll', onScroll);
+        renderBatch(summary, container.children.length);
+      }
+    }
+
+    function isFiltering() {
+      return !!(
+        document.getElementById("chartFilter").value ||
+        document.getElementById("xFilter").value ||
+        document.getElementById("yFilter").value ||
+        document.getElementById("trendFilter").value ||
+        document.getElementById("tokenSearch").value ||
+        document.getElementById("tokenPositionFilter").value
+      );
+    }
+
+    function applyFilters() {
+      container.innerHTML = '';
+      let filtered = summary.filter(matchAllFilters);
+      filtered.sort((a,b) => getPct(b) - getPct(a));
+      renderBatch(filtered);
     }
 
     function matchAllFilters(f) {
@@ -113,14 +140,12 @@
       const tf = document.getElementById("trendFilter").value;
       const ts = document.getElementById("tokenSearch").value.toLowerCase();
       const pf = document.getElementById("tokenPositionFilter").value;
-
       const ftChart = f.chart_type_modes.map(x=>x.toLowerCase()).join(',');
       const ftX     = f.x_type_modes.map(x=>x.toLowerCase()).join(',');
       const ftY     = f.y_type_modes.map(x=>x.toLowerCase()).join(',');
       const ftTrend = f.trend_modes.map(x=>x.toLowerCase()).join(',');
       const ftToken = f.most_common_token.toLowerCase();
       const ftPos   = (f.token_positions_modes||[]).map(x=>x.toLowerCase());
-
       return (!cf || ftChart.includes(cf))
           && (!xf || ftX.includes(xf))
           && (!yf || ftY.includes(yf))
@@ -145,64 +170,12 @@
       return 0;
     }
 
-    function loadPage() {
-      if (loading || currentPage >= TOTAL_PAGES) return;
-      loading = true;
-      fetch(`metadata/features_page_${currentPage}.json`)
-        .then(r => r.ok ? r.json() : [])
-        .then(data => {
-          features.push(...data);
-          loadedPages.add(currentPage);
-          if (!filtering) {
-            data.forEach(f => container.appendChild(createFeatureCard(f)));
-          } else {
-            const matches = data.filter(matchAllFilters);
-            matches.sort((a,b)=>getPct(b)-getPct(a));
-            matches.forEach(f => container.appendChild(createFeatureCard(f)));
-          }
-          currentPage++;
-        })
-        .finally(() => { loading = false; });
-    }
-
-    function loadAllPages() {
-      const promises = [];
-      for (let p = 0; p < TOTAL_PAGES; p++) {
-        if (!loadedPages.has(p)) {
-          promises.push(
-            fetch(`metadata/features_page_${p}.json`)
-              .then(r => r.ok ? r.json() : [])
-              .then(data => {
-                features.push(...data);
-                loadedPages.add(p);
-              })
-          );
-        }
-      }
-      return Promise.all(promises);
-    }
-
-    async function updateFilteredFeatures() {
-      filtering = true;
-      container.innerHTML = '';
-      currentPage = TOTAL_PAGES; // stop lazy‐loading
-      await loadAllPages();
-      const matches = features.filter(matchAllFilters);
-      matches.sort((a,b)=>getPct(b)-getPct(a));
-      matches.forEach(f => container.appendChild(createFeatureCard(f)));
-    }
-
-    function createFeatureCard(f) {
-      const modesPos = f.token_positions_modes || [];
+    function createCard(f) {
       const div = document.createElement('div');
       div.className = 'feature';
-      div.setAttribute('data-token', f.most_common_token.trim().toLowerCase());
-      div.setAttribute('data-chart-type', f.chart_type_modes.map(x=>x.toLowerCase()).join(','));
-      div.setAttribute('data-x-type', f.x_type_modes.map(x=>x.toLowerCase()).join(','));
-      div.setAttribute('data-y-type', f.y_type_modes.map(x=>x.toLowerCase()).join(','));
-      div.setAttribute('data-trend', f.trend_modes.map(x=>x.toLowerCase()).join(','));
-      div.setAttribute('data-token-position', modesPos.map(x=>x.toLowerCase()).join(','));
+      div.dataset.featureIdx = f.feature_idx;
 
+      // build the inner HTML from summary fields
       div.innerHTML = `
         <div class="chart-title">Feature ${f.feature_idx}</div>
         <img loading="lazy" src="stacked_figures/feature_${f.feature_idx}.png" alt="">
@@ -210,94 +183,68 @@
           <div class="meta-col">
             <p>Mode Token: <span class="bold">${f.most_common_token}</span> (${f.most_common_ratio})</p>
             <p>Token Position:</p>
-            <ul>
-              ${Object.entries(f.token_positions||{}).map(([p,pc])=>
-                modesPos.includes(p)
-                  ? `<li><span class="bold">${p}: ${pc}</span></li>`
-                  : `<li>${p}: ${pc}</li>`
-              ).join('')}
-            </ul>
+            <ul>${Object.entries(f.token_positions||{})
+              .map(([p,pc]) => `<li>${p}: ${pc}</li>`).join('')}</ul>
             <p>Context Tokens:</p>
             <div class="context-block"></div>
           </div>
           <div class="meta-col">
             <p>Chart Types:</p>
-            <ul>${Object.entries(f.chart_type_freq).map(([k,v])=>
-              f.chart_type_modes.includes(k)
-                ? `<li><span class="bold">${k} (${v})</span></li>`
-                : `<li>${k} (${v})</li>`
-            ).join('')}</ul>
+            <ul>${Object.entries(f.chart_type_freq)
+              .map(([k,v]) => `<li>${k}: ${v}</li>`).join('')}</ul>
             <p>Trends:</p>
-            <ul>${Object.entries(f.trend_freq).map(([k,v])=>
-              f.trend_modes.includes(k)
-                ? `<li><span class="bold">${k} (${v})</span></li>`
-                : `<li>${k} (${v})</li>`
-            ).join('')}</ul>
+            <ul>${Object.entries(f.trend_freq)
+              .map(([k,v]) => `<li>${k}: ${v}</li>`).join('')}</ul>
           </div>
           <div class="meta-col">
             <p>X Types:</p>
-            <ul>${Object.entries(f.x_type_freq).map(([k,v])=>
-              f.x_type_modes.includes(k)
-                ? `<li><span class="bold">${k} (${v})</span></li>`
-                : `<li>${k} (${v})</li>`
-            ).join('')}</ul>
+            <ul>${Object.entries(f.x_type_freq)
+              .map(([k,v]) => `<li>${k}: ${v}</li>`).join('')}</ul>
             <p>Y Types:</p>
-            <ul>${Object.entries(f.y_type_freq).map(([k,v])=>
-              f.y_type_modes.includes(k)
-                ? `<li><span class="bold">${k} (${v})</span></li>`
-                : `<li>${k} (${v})</li>`
-            ).join('')}</ul>
+            <ul>${Object.entries(f.y_type_freq)
+              .map(([k,v]) => `<li>${k}: ${v}</li>`).join('')}</ul>
           </div>
-        </div>
-      `;
+        </div>`;
 
-      // Hoverable context examples
-      const cb = div.querySelector('.context-block');
-      if (f.context_examples) {
-        Object.values(f.context_examples).forEach(ctx => {
-          const wrapper = document.createElement('div');
-          wrapper.className = 'context-example';
-
-          // tokens
-          const maxV = Math.max(...ctx.values);
-          ctx.tokens.forEach((t,i) => {
-            const alpha = maxV ? ctx.values[i]/maxV : 0;
-            const span = document.createElement('span');
-            span.className = 'context-token';
-            span.textContent = t;
-            span.style.backgroundColor = `rgba(0,0,0,${alpha})`;
-            span.style.color = alpha>0.5 ? 'white' : 'black';
-            wrapper.appendChild(span);
-          });
-
-          // hover image
-          const img = document.createElement('img');
-          img.src = `images/${ctx.chart_idx}.png`;  // adjust path if needed
-          wrapper.appendChild(img);
-
-          cb.appendChild(wrapper);
-          const hr = document.createElement('hr');
-          hr.style.border = 'none';
-          hr.style.borderTop = '1px solid #eee';
-          cb.appendChild(hr);
-        });
-      }
-
+      // if details already loaded, fill context immediately
+      if (details) fillContext(div);
       return div;
     }
 
-    // Wire up filters
-    document.getElementById("tokenSearch").addEventListener("input", updateFilteredFeatures);
-    document.querySelectorAll(".filters select")
-      .forEach(el => el.addEventListener("change", updateFilteredFeatures));
+    function fillContext(div) {
+      const idx = div.dataset.featureIdx;
+      const ctxs = details[idx] && details[idx].context_dict;
+      const cb = div.querySelector('.context-block');
+      cb.innerHTML = '';
+      if (!ctxs) return;
+      Object.values(ctxs).forEach(ctx => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'context-example';
+        const maxV = Math.max(...ctx.values);
+        ctx.tokens.forEach((t,i) => {
+          const a = maxV ? ctx.values[i]/maxV : 0;
+          const span = document.createElement('span');
+          span.className = 'context-token';
+          span.textContent = t;
+          span.style.backgroundColor = `rgba(0,0,0,${a})`;
+          span.style.color = a>0.5 ? 'white' : 'black';
+          wrapper.appendChild(span);
+        });
+        const img = document.createElement('img');
+        img.src = `images/${ctx.chart_idx}.png`; // adjust path as needed
+        wrapper.appendChild(img);
 
-    // Initial load & infinite scroll
-    loadPage();
-    window.addEventListener('scroll', () => {
-      if (!filtering && (window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
-        loadPage();
-      }
-    });
+        cb.appendChild(wrapper);
+        const hr = document.createElement('hr');
+        hr.style.border='none'; hr.style.borderTop='1px solid #eee';
+        cb.appendChild(hr);
+      });
+    }
+
+    // wire up filters
+    document.getElementById("tokenSearch").addEventListener("input", applyFilters);
+    document.querySelectorAll(".filters select")
+      .forEach(el => el.addEventListener("change", applyFilters));
   </script>
 </body>
 </html>

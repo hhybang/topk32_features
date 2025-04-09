@@ -25,6 +25,24 @@
                      padding: 5px; background: #fafafa; margin-bottom: 10px; }
     .context-token { display: inline-block; margin: 2px; padding: 2px 4px;
                      border-radius: 3px; font-size: 12px; }
+    /* Hoverable context‐example wrapper */
+    .context-example {
+      position: relative;
+      display: inline-block;
+      margin-right: 8px;
+    }
+    .context-example img {
+      display: none;
+      position: absolute;
+      top: 100%; left: 0;
+      width: 200px;
+      border: 1px solid #ccc;
+      background: #fff;
+      z-index: 100;
+    }
+    .context-example:hover img {
+      display: block;
+    }
   </style>
 </head>
 <body>
@@ -73,7 +91,7 @@
     const TOTAL_PAGES = 163;
     const PAGE_SIZE   = 50;
 
-    let features = [];            // only used to cache loaded pages
+    let features = [];            // cache of loaded pages
     let filtering = false;
     let currentPage = 0;
     let loading = false;
@@ -127,24 +145,21 @@
       return 0;
     }
 
-    function sortAndRender(data) {
-      data.sort((a,b)=> getPct(b) - getPct(a));
-      data.forEach(f=> container.appendChild(createFeatureCard(f)));
+    function sortAndRender(matches) {
+      matches.sort((a,b)=> getPct(b) - getPct(a));
+      matches.forEach(f=> container.appendChild(createFeatureCard(f)));
     }
 
-    // load one page, filter if needed, then render
     function loadPage() {
       if (loading || currentPage >= TOTAL_PAGES) return;
       loading = true;
       fetch(`metadata/features_page_${currentPage}.json`)
-        .then(r=>r.ok ? r.json() : [])
+        .then(r=> r.ok ? r.json() : [])
         .then(data => {
           features.push(...data);
           if (!filtering) {
-            // unfiltered: render entire page
             data.forEach(f=> container.appendChild(createFeatureCard(f)));
           } else {
-            // filtered: pick matches only
             const matches = data.filter(matchAllFilters);
             sortAndRender(matches);
           }
@@ -160,7 +175,6 @@
       loadPage();
     }
 
-    // create the card element (same as before)
     function createFeatureCard(f) {
       const modesPos = f.token_positions_modes || [];
       const div = document.createElement('div');
@@ -220,10 +234,12 @@
         </div>
       `;
 
-      // populate context-block
+      // Populate context-block with hoverable examples
       const cb = div.querySelector('.context-block');
       if (f.context_examples) {
         Object.values(f.context_examples).forEach(ctx => {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'context-example';
           const maxV = Math.max(...ctx.values);
           ctx.tokens.forEach((t,i) => {
             const alpha = maxV ? ctx.values[i]/maxV : 0;
@@ -232,30 +248,34 @@
             span.textContent = t;
             span.style.backgroundColor = `rgba(0,0,0,${alpha})`;
             span.style.color = alpha>0.5 ? 'white' : 'black';
-            cb.appendChild(span);
+            wrapper.appendChild(span);
           });
+          // Hover image
+          const img = document.createElement('img');
+          img.src = `images/${ctx.chart_idx}.png`;
+          wrapper.appendChild(img);
+
+          cb.appendChild(wrapper);
           const hr = document.createElement('hr');
-          hr.style.border = 'none'; hr.style.borderTop = '1px solid #eee';
+          hr.style.border = 'none';
+          hr.style.borderTop = '1px solid #eee';
           cb.appendChild(hr);
         });
       }
+
       return div;
     }
 
-    // wire filters
+    // Wire up filters
     document.getElementById("tokenSearch").addEventListener("input", updateFilteredFeatures);
     document.querySelectorAll(".filters select")
       .forEach(el => el.addEventListener("change", updateFilteredFeatures));
 
-    // initial load & scroll
+    // Initial load & infinite scroll
     loadPage();
     window.addEventListener('scroll', () => {
       if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
-        if (noFilterActive()) {
-          loadPage();
-        } else {
-          loadPage();  // in filter mode, we still fetch next page
-        }
+        loadPage();
       }
     });
   </script>

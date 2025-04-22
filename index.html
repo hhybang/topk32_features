@@ -187,7 +187,7 @@
       currentIndex = end;
     }
 
-    fetch('processed_features.json')
+    fetch("https://huggingface.co/datasets/hhybang/vistext_sae_features/resolve/main/processed_features.json")
       .then(res => res.json())
       .then(data => {
         features = data;

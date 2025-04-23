@@ -30,6 +30,7 @@
       display: flex;
       flex-direction: row;
       gap: 20px;
+      align-items: stretch;
     }
     .left-col {
       flex: 1;
@@ -59,7 +60,9 @@
     }
     .right-col {
       flex: 1;
+      max-height: 100%;
       overflow-x: auto;
+      overflow-y: auto;
       border-left: 2px solid #eee;
       padding-left: 10px;
     }

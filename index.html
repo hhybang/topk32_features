@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>BatchTopK32 Feature Figures and Metadata</title>
+  <title>BatchTopK SAE Features on VisText</title>
      <style>
     body {
       font-family: Arial, sans-serif;
@@ -168,7 +168,7 @@
   </style>
 </head>
 <body>
-  <h1>BatchTopK32 Feature Figures and Metadata</h1>
+  <h1>BatchTopK SAE Features on VisText</h1>
   <div class="filters">
     <input type="text" id="featureSearch" placeholder="Search Feature #">
     <input type="number" id="ratioFilter" placeholder="Max mode %" min="0" max="100" style="width: 80px;">
@@ -281,6 +281,7 @@ function renderNextBatch() {
             <p><span class="bold">Y Types</span>: ${(f.y_type_freq && Object.entries(f.y_type_freq).map(([k,v]) => f.y_type_modes.includes(k) ? `<span class='bold'>${k} (${v})</span>` : `${k} (${v})`).join(', ')) || 'N/A'}</p>
           </div>
         </div>
+        <div class="right-scroll-wrapper">
         <div class="right-col">
           <div class="token-block">
             ${(f.context_examples_list || []).map(ctx => {
@@ -298,6 +299,7 @@ function renderNextBatch() {
               </div>`;
             }).join('')}
           </div>
+        </div
         </div>
       </div>
     `;

@@ -16,10 +16,20 @@
     }
     .feature {
       display: flex;
-      flex-direction: row;
-      gap: 20px;
+      flex-direction: column;
+      gap: 10px;
       border-bottom: 1px solid #ccc;
       padding-bottom: 30px;
+    }
+    .feature-title {
+      font-size: 16px;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    .feature-body {
+      display: flex;
+      flex-direction: row;
+      gap: 20px;
     }
     .left-col {
       flex: 1;
@@ -50,6 +60,8 @@
     .right-col {
       flex: 1;
       overflow-x: auto;
+      border-left: 2px solid #eee;
+      padding-left: 10px;
     }
     .token-block {
       display: flex;
@@ -57,9 +69,11 @@
       flex-wrap: nowrap;
       overflow-x: auto;
       gap: 20px;
+      width: 100%;
     }
     .token-set {
-      min-width: 200px;
+      flex: 0 0 auto;
+      width: 220px;
       border: 1px solid #ccc;
       padding: 10px;
       background-color: #fafafa;
@@ -99,6 +113,8 @@
     .chart-thumb {
       width: 100%;
       height: auto;
+      max-height: 140px;
+      object-fit: contain;
       border-radius: 4px;
       margin-bottom: 8px;
     }
@@ -125,6 +141,14 @@
         const div = document.createElement('div');
         div.className = 'feature';
 
+        const title = document.createElement('div');
+        title.className = 'feature-title';
+        title.textContent = `Feature ${f.feature_idx}`;
+        div.appendChild(title);
+
+        const body = document.createElement('div');
+        body.className = 'feature-body';
+
         const leftCol = document.createElement('div');
         leftCol.className = 'left-col';
         const chartDiv = document.createElement('div');
@@ -134,7 +158,6 @@
         const metadata = document.createElement('div');
         metadata.className = 'metadata';
         metadata.innerHTML = `
-          <p><span class="bold">Feature</span>: ${f.feature_idx}</p>
           <p><span class="bold">Mode Token</span>: ${f.most_common_token || 'N/A'} (${f.most_common_ratio || 'N/A'})</p>
           <p><span class="bold">Charts Seen</span>: ${f.n_charts_seen || 'N/A'}</p>
           <p><span class="bold">Token Position</span>: ${(f.token_positions && Object.entries(f.token_positions).map(([k,v]) => `${k} (${v})`).join(', ')) || 'N/A'}</p>
@@ -150,49 +173,62 @@
         const tokenBlock = document.createElement('div');
         tokenBlock.className = 'token-block';
 
-        (f.context_examples_list || []).forEach(ctx => {
-          const tokenSet = document.createElement('div');
-          tokenSet.className = 'token-set';
+        console.log('Rendering feature:', f.feature_idx, f.context_examples_list); 
+        if (f.context_examples_list) {
+          for (let ctx of f.context_examples_list) {
+            const tokenSet = document.createElement('div');
+            tokenSet.className = 'token-set';
 
-          const chartImage = document.createElement('img');
-          chartImage.className = 'chart-thumb';
-          chartImage.loading = 'lazy';
-          chartImage.src = `images/${ctx.chart_idx}.png`;
-          chartImage.alt = `Chart ${ctx.chart_idx}`;
-          tokenSet.appendChild(chartImage);
+            const chartImage = document.createElement('img');
+            chartImage.className = 'chart-thumb';
+            chartImage.loading = 'lazy';
+            chartImage.src = `images/${ctx.chart_idx}.png`;
+            chartImage.alt = `Chart ${ctx.chart_idx}`;
+            tokenSet.appendChild(chartImage);
 
-          const maxVal = Math.max(...ctx.values);
-          const tokenRow = document.createElement('div');
-          tokenRow.className = 'tokens';
+            const maxVal = Math.max(...ctx.values);
+            const tokenRow = document.createElement('div');
+            tokenRow.className = 'tokens';
 
-          ctx.tokens.forEach((token, i) => {
-            const span = document.createElement('span');
-            span.className = 'token';
-            span.textContent = token;
-            span.setAttribute('data-value', ctx.values[i]);
-            span.style.backgroundColor = getColorForValue(ctx.values[i], maxVal);
-            span.style.color = ctx.values[i] > maxVal * 0.5 ? 'white' : 'black';
-            tokenRow.appendChild(span);
-          });
+            ctx.tokens.forEach((token, i) => {
+              const span = document.createElement('span');
+              span.className = 'token';
+              span.textContent = token;
+              span.setAttribute('data-value', ctx.values[i]);
+              span.style.backgroundColor = getColorForValue(ctx.values[i], maxVal);
+              span.style.color = ctx.values[i] > maxVal * 0.5 ? 'white' : 'black';
+              tokenRow.appendChild(span);
+            });
 
-          tokenSet.appendChild(tokenRow);
-          tokenBlock.appendChild(tokenSet);
-        });
+            tokenSet.appendChild(tokenRow);
+            tokenBlock.appendChild(tokenSet);
+          }
+        } else {
+          const fallback = document.createElement('div');
+          fallback.textContent = 'No context examples available.';
+          tokenBlock.appendChild(fallback);
+        }
 
         rightCol.appendChild(tokenBlock);
-        div.appendChild(leftCol);
-        div.appendChild(rightCol);
+        body.appendChild(leftCol);
+        body.appendChild(rightCol);
+        div.appendChild(body);
         container.appendChild(div);
       }
       currentIndex = end;
     }
 
-    fetch("https://huggingface.co/datasets/hhybang/vistext_sae_features/resolve/main/processed_features.json")
+    fetch("https://drive.google.com/uc?export=download&id=1gKbJxaWkGH8_kGEgzXm0qOOkVJk9_d5m")
       .then(res => res.json())
       .then(data => {
+        console.log("✅ Loaded:", data.length);
         features = data;
         renderNextBatch();
+      })
+      .catch(err => {
+        console.error("❌ Failed to fetch JSON:", err);
       });
+
 
     window.addEventListener('scroll', () => {
       if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {

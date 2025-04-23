@@ -66,14 +66,13 @@
     .token-block {
       display: flex;
       flex-direction: row;
-      flex-wrap: nowrap;
-      overflow-x: auto;
       gap: 20px;
-      width: 100%;
+      width: max-content;
+      padding-bottom: 8px;
     }
     .token-set {
       flex: 0 0 auto;
-      width: 220px;
+      width: 200px;
       border: 1px solid #ccc;
       padding: 10px;
       background-color: #fafafa;
@@ -112,8 +111,7 @@
     }
     .chart-thumb {
       width: 100%;
-      height: auto;
-      max-height: 140px;
+      max-height: 160px;
       object-fit: contain;
       border-radius: 4px;
       margin-bottom: 8px;
@@ -173,41 +171,34 @@
         const tokenBlock = document.createElement('div');
         tokenBlock.className = 'token-block';
 
-        console.log('Rendering feature:', f.feature_idx, f.context_examples_list); 
-        if (f.context_examples_list) {
-          for (let ctx of f.context_examples_list) {
-            const tokenSet = document.createElement('div');
-            tokenSet.className = 'token-set';
+        (f.context_examples_list || []).forEach(ctx => {
+          const tokenSet = document.createElement('div');
+          tokenSet.className = 'token-set';
 
-            const chartImage = document.createElement('img');
-            chartImage.className = 'chart-thumb';
-            chartImage.loading = 'lazy';
-            chartImage.src = `images/${ctx.chart_idx}.png`;
-            chartImage.alt = `Chart ${ctx.chart_idx}`;
-            tokenSet.appendChild(chartImage);
+          const chartImage = document.createElement('img');
+          chartImage.className = 'chart-thumb';
+          chartImage.loading = 'lazy';
+          chartImage.src = `images/${ctx.chart_idx}.png`;
+          chartImage.alt = `Chart ${ctx.chart_idx}`;
+          tokenSet.appendChild(chartImage);
 
-            const maxVal = Math.max(...ctx.values);
-            const tokenRow = document.createElement('div');
-            tokenRow.className = 'tokens';
+          const maxVal = Math.max(...ctx.values);
+          const tokenRow = document.createElement('div');
+          tokenRow.className = 'tokens';
 
-            ctx.tokens.forEach((token, i) => {
-              const span = document.createElement('span');
-              span.className = 'token';
-              span.textContent = token;
-              span.setAttribute('data-value', ctx.values[i]);
-              span.style.backgroundColor = getColorForValue(ctx.values[i], maxVal);
-              span.style.color = ctx.values[i] > maxVal * 0.5 ? 'white' : 'black';
-              tokenRow.appendChild(span);
-            });
+          ctx.tokens.forEach((token, i) => {
+            const span = document.createElement('span');
+            span.className = 'token';
+            span.textContent = token;
+            span.setAttribute('data-value', ctx.values[i]);
+            span.style.backgroundColor = getColorForValue(ctx.values[i], maxVal);
+            span.style.color = ctx.values[i] > maxVal * 0.5 ? 'white' : 'black';
+            tokenRow.appendChild(span);
+          });
 
-            tokenSet.appendChild(tokenRow);
-            tokenBlock.appendChild(tokenSet);
-          }
-        } else {
-          const fallback = document.createElement('div');
-          fallback.textContent = 'No context examples available.';
-          tokenBlock.appendChild(fallback);
-        }
+          tokenSet.appendChild(tokenRow);
+          tokenBlock.appendChild(tokenSet);
+        });
 
         rightCol.appendChild(tokenBlock);
         body.appendChild(leftCol);
@@ -218,17 +209,31 @@
       currentIndex = end;
     }
 
-    fetch("https://drive.google.com/uc?export=download&id=1gKbJxaWkGH8_kGEgzXm0qOOkVJk9_d5m")
-      .then(res => res.json())
-      .then(data => {
-        console.log("✅ Loaded:", data.length);
-        features = data;
-        renderNextBatch();
-      })
-      .catch(err => {
-        console.error("❌ Failed to fetch JSON:", err);
-      });
+    async function loadChunksSequentially() {
+      const urls = [
+        "features_part_aa.json",
+        "features_part_ab.json",
+        "features_part_ac.json",
+        "features_part_ad.json",
+        "features_part_ae.json",
+        "features_part_af.json",
+        "features_part_ag.json",
+        "features_part_ah.json"
+      ];
 
+      for (const url of urls) {
+        try {
+          const res = await fetch(url);
+          const chunk = await res.json();
+          features = features.concat(chunk);
+        } catch (err) {
+          console.error(`❌ Failed to fetch ${url}:`, err);
+        }
+      }
+      renderNextBatch();
+    }
+
+    loadChunksSequentially();
 
     window.addEventListener('scroll', () => {
       if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {

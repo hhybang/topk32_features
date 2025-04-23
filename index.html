@@ -72,39 +72,43 @@
     }
     .right-col {
       flex: 1;
-      overflow-x: auto;
-      overflow-y: auto;
-      border-left: 2px solid #eee;
-      padding-left: 10px;
       display: flex;
       flex-direction: column;
       max-height: 100%;
-    }
-    .feature-body > .left-col,
-    .feature-body > .right-col {
-      height: auto;
+      overflow-y: hidden;
+      padding-left: 10px;
+      border-left: 2px solid #eee;
     }
     .token-block {
       display: flex;
       flex-direction: row;
-      gap: 20px;
-      width: max-content;
-      padding-bottom: 8px;
       flex-wrap: nowrap;
+      overflow-x: auto;
+      gap: 20px;
+      height: 100%;
     }
     .token-set {
       flex: 0 0 auto;
-      width: 200px;
+      width: 220px;
       border: 1px solid #ccc;
       padding: 10px;
       background-color: #fafafa;
       border-radius: 5px;
+      display: flex;
+      flex-direction: column;
+      max-height: 100%;
+    }
+    .chart-thumb {
+      width: 100%;
+      max-height: 200px;
+      object-fit: contain;
+      border-radius: 4px;
+      margin-bottom: 8px;
     }
     .tokens {
       display: flex;
       flex-wrap: wrap;
       gap: 4px;
-      max-height: 150px;
       overflow-y: auto;
     }
     .token {
@@ -133,53 +137,45 @@
     .token:hover::after {
       display: block;
     }
-    .chart-thumb {
-      width: 100%;
-      max-height: 160px;
-      object-fit: contain;
-      border-radius: 4px;
-      margin-bottom: 8px;
-    }
   </style>
 </head>
 <body>
-<h1>BatchTopK32 Feature Figures and Metadata</h1>
+  <h1>BatchTopK32 Feature Figures and Metadata</h1>
+  <div class="filters">
+    <input type="text" id="featureSearch" placeholder="Search Feature #">
+    <input type="number" id="ratioFilter" placeholder="Max mode %" min="0" max="100" style="width: 80px;">
 
-<div class="filters">
-  <input type="text" id="featureSearch" placeholder="Search Feature #">
-  <input type="number" id="ratioFilter" placeholder="Max mode %" min="0" max="100" style="width: 80px;">
+    <select id="chartFilter">
+      <option value="">All Chart Types</option>
+      <option value="bar">Bar</option>
+      <option value="area">Area</option>
+      <option value="line">Line</option>
+    </select>
+    <select id="xFilter">
+      <option value="">All X Types</option>
+      <option value="numeric">Numeric</option>
+      <option value="datetime">Datetime</option>
+      <option value="string">String</option>
+      <option value="other">Other</option>
+    </select>
+    <select id="yFilter">
+      <option value="">All Y Types</option>
+      <option value="numeric">Numeric</option>
+      <option value="datetime">Datetime</option>
+      <option value="string">String</option>
+      <option value="other">Other</option>
+    </select>
+    <select id="tokenPositionFilter">
+      <option value="">All Token Positions</option>
+      <option value="title">Title</option>
+      <option value="axis">Axis</option>
+      <option value="value">Value</option>
+    </select>
+  </div>
 
-  <select id="chartFilter">
-    <option value="">All Chart Types</option>
-    <option value="bar">Bar</option>
-    <option value="area">Area</option>
-    <option value="line">Line</option>
-  </select>
-  <select id="xFilter">
-    <option value="">All X Types</option>
-    <option value="numeric">Numeric</option>
-    <option value="datetime">Datetime</option>
-    <option value="string">String</option>
-    <option value="other">Other</option>
-  </select>
-  <select id="yFilter">
-    <option value="">All Y Types</option>
-    <option value="numeric">Numeric</option>
-    <option value="datetime">Datetime</option>
-    <option value="string">String</option>
-    <option value="other">Other</option>
-  </select>
-  <select id="tokenPositionFilter">
-    <option value="">All Token Positions</option>
-    <option value="title">Title</option>
-    <option value="axis">Axis</option>
-    <option value="value">Value</option>
-  </select>
-</div>
+  <div class="features-container" id="features-container"></div>
 
-<div class="features-container" id="features-container"></div>
-
-<script>
+  <script>
 const container = document.getElementById('features-container');
 let features = [];
 let filteredFeatures = [];
@@ -219,6 +215,19 @@ function updateFilteredFeatures() {
       && (!tokenPos || ftPos.includes(tokenPos));
   });
 
+  // Sort logic by filter type or default by tokens above threshold
+  if (chartType) {
+    filteredFeatures.sort((a, b) => parseInt(b.chart_type_freq?.[chartType]?.replace('%','') || 0) - parseInt(a.chart_type_freq?.[chartType]?.replace('%','') || 0));
+  } else if (xType) {
+    filteredFeatures.sort((a, b) => parseInt(b.x_type_freq?.[xType]?.replace('%','') || 0) - parseInt(a.x_type_freq?.[xType]?.replace('%','') || 0));
+  } else if (yType) {
+    filteredFeatures.sort((a, b) => parseInt(b.y_type_freq?.[yType]?.replace('%','') || 0) - parseInt(a.y_type_freq?.[yType]?.replace('%','') || 0));
+  } else if (tokenPos) {
+    filteredFeatures.sort((a, b) => parseInt(b.token_positions?.[tokenPos]?.replace('%','') || 0) - parseInt(a.token_positions?.[tokenPos]?.replace('%','') || 0));
+  } else {
+    filteredFeatures.sort((a, b) => (b.n_tokens_above_threshold || 0) - (a.n_tokens_above_threshold || 0));
+  }
+
   currentIndex = 0;
   container.innerHTML = '';
   renderNextBatch();
@@ -238,10 +247,10 @@ function renderNextBatch() {
           <div class="metadata">
             <p><span class="bold">Mode Token</span>: ${f.most_common_token || 'N/A'} (${f.most_common_ratio || 'N/A'})</p>
             <p><span class="bold">Charts Seen</span>: ${f.n_charts_seen || 'N/A'}</p>
-            <p><span class="bold">Token Position</span>: ${(f.token_positions && Object.entries(f.token_positions).map(([k,v]) => `${k} (${v})`).join(', ')) || 'N/A'}</p>
-            <p><span class="bold">Chart Types</span>: ${(f.chart_type_freq && Object.entries(f.chart_type_freq).map(([k,v]) => `${k} (${v})`).join(', ')) || 'N/A'}</p>
-            <p><span class="bold">X Types</span>: ${(f.x_type_freq && Object.entries(f.x_type_freq).map(([k,v]) => `${k} (${v})`).join(', ')) || 'N/A'}</p>
-            <p><span class="bold">Y Types</span>: ${(f.y_type_freq && Object.entries(f.y_type_freq).map(([k,v]) => `${k} (${v})`).join(', ')) || 'N/A'}</p>
+            <p><span class="bold">Token Position</span>: ${(f.token_positions && Object.entries(f.token_positions).map(([k,v]) => f.token_positions_modes.includes(k) ? `<span class='bold'>${k} (${v})</span>` : `${k} (${v})`).join(', ')) || 'N/A'}</p>
+            <p><span class="bold">Chart Types</span>: ${(f.chart_type_freq && Object.entries(f.chart_type_freq).map(([k,v]) => f.chart_type_modes.includes(k) ? `<span class='bold'>${k} (${v})</span>` : `${k} (${v})`).join(', ')) || 'N/A'}</p>
+            <p><span class="bold">X Types</span>: ${(f.x_type_freq && Object.entries(f.x_type_freq).map(([k,v]) => f.x_type_modes.includes(k) ? `<span class='bold'>${k} (${v})</span>` : `${k} (${v})`).join(', ')) || 'N/A'}</p>
+            <p><span class="bold">Y Types</span>: ${(f.y_type_freq && Object.entries(f.y_type_freq).map(([k,v]) => f.y_type_modes.includes(k) ? `<span class='bold'>${k} (${v})</span>` : `${k} (${v})`).join(', ')) || 'N/A'}</p>
           </div>
         </div>
         <div class="right-col">
@@ -271,15 +280,9 @@ function renderNextBatch() {
 
 async function loadChunksSequentially() {
   const urls = [
-        "features_1.json",
-        "features_2.json",
-        "features_3.json",
-        "features_4.json",
-        "features_5.json",
-        "features_6.json",
-        "features_7.json",
-        "features_8.json"
-      ];
+    "features_1.json", "features_2.json", "features_3.json", "features_4.json",
+    "features_5.json", "features_6.json", "features_7.json", "features_8.json"
+  ];
   for (const url of urls) {
     try {
       const res = await fetch(url);
@@ -294,8 +297,7 @@ async function loadChunksSequentially() {
 
 document.getElementById("featureSearch").addEventListener("input", updateFilteredFeatures);
 document.getElementById("ratioFilter").addEventListener("input", updateFilteredFeatures);
-document.querySelectorAll(".filters select")
-  .forEach(s => s.addEventListener("change", updateFilteredFeatures));
+document.querySelectorAll(".filters select").forEach(s => s.addEventListener("change", updateFilteredFeatures));
 
 window.addEventListener('scroll', () => {
   if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
@@ -305,3 +307,5 @@ window.addEventListener('scroll', () => {
 
 loadChunksSequentially();
 </script>
+</body>
+</html>

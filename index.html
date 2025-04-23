@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>BatchTopK SAE Features on VisText</title>
+  <title>BatchTopK32 Feature Figures and Metadata</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -143,98 +143,134 @@
   </style>
 </head>
 <body>
-  <h1>BatchTopK SAE Features on VisText</h1>
+<h1>BatchTopK32 Feature Figures and Metadata</h1>
 
-  <div class="filters">
-    <input type="text" id="featureSearch" placeholder="Search Feature #">
-    <input type="number" id="ratioFilter" placeholder="Max mode %" min="0" max="100" style="width: 80px;">
+<div class="filters">
+  <input type="text" id="featureSearch" placeholder="Search Feature #">
+  <input type="number" id="ratioFilter" placeholder="Max mode %" min="0" max="100" style="width: 80px;">
 
-    <select id="chartFilter">
-      <option value="">All Chart Types</option>
-      <option value="bar">Bar</option>
-      <option value="area">Area</option>
-      <option value="line">Line</option>
-    </select>
-    <select id="xFilter">
-      <option value="">All X Types</option>
-      <option value="numeric">Numeric</option>
-      <option value="datetime">Datetime</option>
-      <option value="string">String</option>
-      <option value="other">Other</option>
-    </select>
-    <select id="yFilter">
-      <option value="">All Y Types</option>
-      <option value="numeric">Numeric</option>
-      <option value="datetime">Datetime</option>
-      <option value="string">String</option>
-      <option value="other">Other</option>
-    </select>
-    <select id="tokenPositionFilter">
-      <option value="">All Token Positions</option>
-      <option value="title">Title</option>
-      <option value="axis">Axis</option>
-      <option value="value">Value</option>
-    </select>
-  </div>
+  <select id="chartFilter">
+    <option value="">All Chart Types</option>
+    <option value="bar">Bar</option>
+    <option value="area">Area</option>
+    <option value="line">Line</option>
+  </select>
+  <select id="xFilter">
+    <option value="">All X Types</option>
+    <option value="numeric">Numeric</option>
+    <option value="datetime">Datetime</option>
+    <option value="string">String</option>
+    <option value="other">Other</option>
+  </select>
+  <select id="yFilter">
+    <option value="">All Y Types</option>
+    <option value="numeric">Numeric</option>
+    <option value="datetime">Datetime</option>
+    <option value="string">String</option>
+    <option value="other">Other</option>
+  </select>
+  <select id="tokenPositionFilter">
+    <option value="">All Token Positions</option>
+    <option value="title">Title</option>
+    <option value="axis">Axis</option>
+    <option value="value">Value</option>
+  </select>
+</div>
 
-  <div class="features-container" id="features-container"></div>
+<div class="features-container" id="features-container"></div>
 
-  <script>
-    function getColorForValue(value, max) {
-      const alpha = Math.max(0.1, Math.min(1, value / max));
-      return `rgba(0, 0, 0, ${alpha})`;
-    }
+<script>
+const container = document.getElementById('features-container');
+let features = [];
+let filteredFeatures = [];
+let currentIndex = 0;
+const batchSize = 10;
 
-    let features = [];
-    let filteredFeatures = [];
-    let currentIndex = 0;
-    const batchSize = 10;
-    const container = document.getElementById('features-container');
+function getColorForValue(value, max) {
+  const alpha = Math.max(0.1, Math.min(1, value / max));
+  return `rgba(0, 0, 0, ${alpha})`;
+}
 
-    function matchValue(dataValue, filterValue) {
-      const vals = dataValue.split(',').map(v => v.trim());
-      return !filterValue || vals.includes(filterValue);
-    }
+function matchValue(dataValue, filterValue) {
+  const vals = dataValue.split(',').map(v => v.trim());
+  return !filterValue || vals.includes(filterValue);
+}
 
-    function updateFilteredFeatures() {
-      const featureSearch = document.getElementById("featureSearch").value;
-      const chartType   = document.getElementById("chartFilter").value;
-      const xType       = document.getElementById("xFilter").value;
-      const yType       = document.getElementById("yFilter").value;
-      const tokenPos    = document.getElementById("tokenPositionFilter").value;
-      const ratioThreshold  = document.getElementById("ratioFilter").value;
+function updateFilteredFeatures() {
+  const featureSearch = document.getElementById("featureSearch").value;
+  const chartType   = document.getElementById("chartFilter").value;
+  const xType       = document.getElementById("xFilter").value;
+  const yType       = document.getElementById("yFilter").value;
+  const tokenPos    = document.getElementById("tokenPositionFilter").value;
+  const ratioThreshold  = document.getElementById("ratioFilter").value;
 
-      filteredFeatures = features.filter(f => {
-        if (featureSearch && f.feature_idx.toString() !== featureSearch.trim()) return false;
-        if (ratioThreshold && parseInt(f.most_common_ratio, 10) >= parseInt(ratioThreshold, 10)) return false;
+  filteredFeatures = features.filter(f => {
+    if (featureSearch && f.feature_idx.toString() !== featureSearch.trim()) return false;
+    if (ratioThreshold && parseInt(f.most_common_ratio, 10) >= parseInt(ratioThreshold, 10)) return false;
 
-        const ftChart = (f.chart_type_modes || []).map(x => x.toLowerCase()).join(',');
-        const ftX     = (f.x_type_modes || []).map(x => x.toLowerCase()).join(',');
-        const ftY     = (f.y_type_modes || []).map(x => x.toLowerCase()).join(',');
-        const ftPos   = (f.token_positions_modes || []).map(x => x.toLowerCase());
+    const ftChart = (f.chart_type_modes || []).map(x => x.toLowerCase()).join(',');
+    const ftX     = (f.x_type_modes || []).map(x => x.toLowerCase()).join(',');
+    const ftY     = (f.y_type_modes || []).map(x => x.toLowerCase()).join(',');
+    const ftPos   = (f.token_positions_modes || []).map(x => x.toLowerCase());
 
-        return matchValue(ftChart, chartType)
-          && matchValue(ftX, xType)
-          && matchValue(ftY, yType)
-          && (!tokenPos || ftPos.includes(tokenPos));
-      });
+    return matchValue(ftChart, chartType)
+      && matchValue(ftX, xType)
+      && matchValue(ftY, yType)
+      && (!tokenPos || ftPos.includes(tokenPos));
+  });
 
-      currentIndex = 0;
-      container.innerHTML = '';
-      renderNextBatch();
-    }
+  currentIndex = 0;
+  container.innerHTML = '';
+  renderNextBatch();
+}
 
-    function renderNextBatch() {
-      const end = Math.min(currentIndex + batchSize, filteredFeatures.length);
-      for (let i = currentIndex; i < end; i++) {
-        const f = filteredFeatures[i];
-        // ... [rendering logic remains the same] ...
-      }
-      currentIndex = end;
-    }
+function renderNextBatch() {
+  const end = Math.min(currentIndex + batchSize, filteredFeatures.length);
+  for (let i = currentIndex; i < end; i++) {
+    const f = filteredFeatures[i];
+    const div = document.createElement('div');
+    div.className = 'feature';
+    div.innerHTML = `
+      <div class="feature-title">Feature ${f.feature_idx}</div>
+      <div class="feature-body">
+        <div class="left-col">
+          <div class="chart"><img src="stacked_figures/feature_${f.feature_idx}.png" alt=""></div>
+          <div class="metadata">
+            <p><span class="bold">Mode Token</span>: ${f.most_common_token || 'N/A'} (${f.most_common_ratio || 'N/A'})</p>
+            <p><span class="bold">Charts Seen</span>: ${f.n_charts_seen || 'N/A'}</p>
+            <p><span class="bold">Token Position</span>: ${(f.token_positions && Object.entries(f.token_positions).map(([k,v]) => `${k} (${v})`).join(', ')) || 'N/A'}</p>
+            <p><span class="bold">Chart Types</span>: ${(f.chart_type_freq && Object.entries(f.chart_type_freq).map(([k,v]) => `${k} (${v})`).join(', ')) || 'N/A'}</p>
+            <p><span class="bold">X Types</span>: ${(f.x_type_freq && Object.entries(f.x_type_freq).map(([k,v]) => `${k} (${v})`).join(', ')) || 'N/A'}</p>
+            <p><span class="bold">Y Types</span>: ${(f.y_type_freq && Object.entries(f.y_type_freq).map(([k,v]) => `${k} (${v})`).join(', ')) || 'N/A'}</p>
+          </div>
+        </div>
+        <div class="right-col">
+          <div class="token-block">
+            ${(f.context_examples_list || []).map(ctx => {
+              const maxVal = Math.max(...ctx.values);
+              return `<div class="token-set">
+                <img class="chart-thumb" src="images/${ctx.chart_idx}.png" alt="Chart ${ctx.chart_idx}">
+                <div class="tokens">
+                  ${ctx.tokens.map((token, i) => {
+                    const val = ctx.values[i];
+                    const color = getColorForValue(val, maxVal);
+                    const font = val > maxVal * 0.5 ? 'white' : 'black';
+                    return `<span class="token" data-value="${val}" style="background-color:${color}; color:${font};">${token}</span>`;
+                  }).join('')}
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+    container.appendChild(div);
+  }
+  currentIndex = end;
+}
 
-    async function loadChunksSequentially() {
-      const urls = [
+async function loadChunksSequentially() {
+  const urls = [
         "features_1.json",
         "features_2.json",
         "features_3.json",
@@ -244,31 +280,28 @@
         "features_7.json",
         "features_8.json"
       ];
-
-      for (const url of urls) {
-        try {
-          const res = await fetch(url);
-          const chunk = await res.json();
-          features = features.concat(chunk);
-        } catch (err) {
-          console.error(`❌ Failed to fetch ${url}:`, err);
-        }
-      }
-      updateFilteredFeatures();
+  for (const url of urls) {
+    try {
+      const res = await fetch(url);
+      const chunk = await res.json();
+      features = features.concat(chunk);
+    } catch (err) {
+      console.error(`❌ Failed to fetch ${url}:`, err);
     }
+  }
+  updateFilteredFeatures();
+}
 
-    document.getElementById("featureSearch").addEventListener("input", updateFilteredFeatures);
-    document.getElementById("ratioFilter").addEventListener("input", updateFilteredFeatures);
-    document.querySelectorAll(".filters select")
-      .forEach(s => s.addEventListener("change", updateFilteredFeatures));
+document.getElementById("featureSearch").addEventListener("input", updateFilteredFeatures);
+document.getElementById("ratioFilter").addEventListener("input", updateFilteredFeatures);
+document.querySelectorAll(".filters select")
+  .forEach(s => s.addEventListener("change", updateFilteredFeatures));
 
-    loadChunksSequentially();
+window.addEventListener('scroll', () => {
+  if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
+    renderNextBatch();
+  }
+});
 
-    window.addEventListener('scroll', () => {
-      if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
-        renderNextBatch();
-      }
-    });
-  </script>
-</body>
-</html>
+loadChunksSequentially();
+</script>
